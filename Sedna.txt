@@ -1,0 +1,9 @@
+# Sedna : https://www.vulnhub.com/entry/hackfest2016-sedna,181/
+# There are multiple way to root this box,
+# if it should work but doesn't try to gather more info about why its not working.
+# Goals: This machine is intended to be doable by someone who have some
+# experience in doing machine on vulnhub
+# There are 4 flags on this machine One for a shell One for root access
+# and two for doing post exploitation on Sedna.
+
+## PHASE 1 : RECON ##
